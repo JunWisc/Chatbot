@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import zipfile
 import os
-import openai  
+from openai import OpenAI
 from gtts import gTTS
 import base64
 from dotenv import load_dotenv
@@ -12,6 +12,9 @@ load_dotenv()
 
 # Read an API key from environment variables
 API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Instantiate the OpenAI client
+client = OpenAI(api_key=API_KEY)
 
 # Data Loading
 # Set up the data directory based on the current file location
@@ -83,9 +86,8 @@ class Chatbot:
 
     # Method to generate responses through OpenAI
     def get_openai_response(self, conversation):
-        openai.api_key = API_KEY  
-        response = openai.ChatCompletion.create(  
-            model=self.model,  
+        response = client.chat.completions.create(
+            model=self.model,
             messages=conversation
         )
         return response.choices[0].message.content  # Return the generated response
