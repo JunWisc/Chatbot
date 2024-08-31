@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import zipfile
 import os
-from openai import OpenAI 
+import openai  
 from gtts import gTTS
 import base64
 from dotenv import load_dotenv
@@ -21,38 +21,24 @@ zip_dir = os.path.join(os.path.dirname(__file__), 'corpus.zip')  # zip file Loca
 if not os.path.exists(zip_dir):
     raise FileNotFoundError(f"Cannot find the designated path: {zip_dir}")
 
-# Check the list of zip file
-zip_files = [zip_dir]
-
-if zip_files:
-    print(f"Found {len(zip_files)} zip files in the directory: {zip_files}")
-else:
-    raise FileNotFoundError("No zip files found. Please check the directory path.")
-
 # Load every data from zip file
-def load_all_data(zip_dir, zip_files):
+def load_all_data(zip_dir):
     all_data = []
     extracted_dir_base = os.path.join(os.path.dirname(__file__), 'extracted_data')
 
-    for zip_file in zip_files:
-        zip_path = os.path.join(zip_dir, zip_file)
-        if not os.path.exists(zip_path):
-            raise FileNotFoundError(f"Cannot find the zip file: {zip_path}")
-        extracted_dir = os.path.join(extracted_dir_base, zip_file[:-4])
+    with zipfile.ZipFile(zip_dir, 'r') as zip_ref:
+        zip_ref.extractall(extracted_dir_base)
 
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extracted_dir)
+    json_files = [f for f in os.listdir(extracted_dir_base) if f.endswith('.json')]
 
-        json_files = [f for f in os.listdir(extracted_dir) if f.endswith('.json')]
-
-        for json_file in json_files:
-            file_path = os.path.join(extracted_dir, json_file)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    all_data.extend(data)
-                else:
-                    all_data.append(data)
+    for json_file in json_files:
+        file_path = os.path.join(extracted_dir_base, json_file)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                all_data.extend(data)
+            else:
+                all_data.append(data)
 
     return all_data
 
@@ -89,19 +75,20 @@ def extract_data(json_data):
 
 # Definition of Chatbot Class
 class Chatbot:
-    def __init__(self, counseling_data):
+    def __init__(self, counseling_data, model):
         self.counseling_data = counseling_data
         self.current_session = [{"role": "system", "content": "You are a helpful counseling assistant."}]
         self.initial_question = "Hello! I am an Chatbot."
+        self.model = model  
 
     # Method to generate responses through OpenAI
     def get_openai_response(self, conversation):
-        client = OpenAI(api_key=API_KEY)  # Use the API key read from an environment variable
-        response = client.chat.completions.create( # Call the GPT model to generate a response
-            model=model,
+        openai.api_key = API_KEY  
+        response = openai.ChatCompletion.create(  
+            model=self.model,  
             messages=conversation
         )
-        return response.choices[0].message.content # Return the generated response
+        return response.choices[0].message.content  # Return the generated response
 
     # Method to start a conversation
     def chat(self, user_input=None):
@@ -110,15 +97,12 @@ class Chatbot:
         conversation = self.current_session
         response = self.get_openai_response(conversation)
         self.current_session.append({"role": "assistant", "content": response})
-        return response # Return the generated response
+        return response  # Return the generated response
 
 # Load all data from the zip file
-all_data = load_all_data(zip_dir, zip_files)
+all_data = load_all_data(zip_dir)
 # Extract data into the required format
 extracted_data = extract_data(all_data)
-
-# Create chatbot instance
-chatbot = Chatbot(extracted_data)
 
 # Streamlit app
 st.title('Chatbot')
@@ -143,7 +127,7 @@ with st.sidebar:
     st.markdown(" --- ")
 
     # Create radio buttons to select GPT model
-    model = st.radio(label="GPT Model", options=["gpt-3.5-turbo", "gpt-4"]) # Provide options for GPT-3.5 and GPT-4 models
+    model = st.radio(label="GPT Model", options=["gpt-3.5-turbo", "gpt-4"])  # Provide options for GPT-3.5 and GPT-4 models
     # Make the radio button labels bold
     st.markdown("""<style>div[class*="stRadio"] > label > div[data-testid="stMarkdownContainer"] 
                 > p {font-size: 20px; font-weight: bold;}</style>""", unsafe_allow_html=True)
@@ -161,6 +145,9 @@ with st.sidebar:
         st.session_state["chat"] = []
         st.session_state["messages"] = [{"role": "assistant", "content": "Hello! I'm an Chatbot."}]
         st.session_state["check_reset"] = True
+
+# Create chatbot instance
+chatbot = Chatbot(extracted_data, model) 
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -184,19 +171,19 @@ if response := st.chat_input("Enter Text"):
     if tts_voice != "TTS Off":
         if tts_voice == "TTS On":
             lang = 'en'
-            tts = gTTS(text=response, lang=lang, slow=False) # Text To Speech
-            tts.save("response.mp3") # Save coverted speech to a file 
+            tts = gTTS(text=response, lang=lang, slow=False)  # Text To Speech
+            tts.save("response.mp3")  # Save coverted speech to a file
 
             # Play TTS audio
-            audio_file = open("response.mp3", "rb") 
-            audio_bytes = audio_file.read() # Audio_bytes variable
+            audio_file = open("response.mp3", "rb")
+            audio_bytes = audio_file.read()  # Audio_bytes variable
             # Encode the audio file to Base64 format
-            audio_base64 = base64.b64encode(audio_bytes).decode() 
+            audio_base64 = base64.b64encode(audio_bytes).decode()
             # HTML audio tag
             audio_html = f"""
             <audio autoplay style="display:none">
             <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-            </audio>  
+            </audio>
             """
             # Insert the generated HTML into the Streamlit app to automatically play
-            st.markdown(audio_html, unsafe_allow_html=True) 
+            st.markdown(audio_html, unsafe_allow_html=True)
