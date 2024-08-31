@@ -88,7 +88,7 @@ class Chatbot:
             model=self.model,  
             messages=conversation
         )
-        return response.choices[0].message.content  # Return the generated response
+        return response.choices[0].message['content']  # Return the generated response
 
     # Method to start a conversation
     def chat(self, user_input=None):
